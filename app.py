@@ -603,6 +603,3 @@ with tab4:
             file_name="cluster_resultado.csv",
             mime="text/csv"
         )
-
-# Rodapé
-st.caption("⚠️ Uso educacional/analítico — não substitui avaliação clínica.")

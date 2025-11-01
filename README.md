@@ -122,10 +122,6 @@ TRABALHO - FINAL/
 - **Análise de Silhouette por Amostra** (gráfico de barras)
 - **Perfil dos Clusters** com z-scores normalizados para variáveis numéricas
 
-## ⚠️ Aviso Importante
-
-Este projeto é destinado **exclusivamente para fins educacionais e analíticos**. **Não substitui** avaliação médica profissional ou diagnóstico clínico.
-
 ## 🛠️ Solução de Problemas
 
 ### Erro: "FileNotFoundError: Arquivo 'heart.csv' não encontrado"
