@@ -147,7 +147,7 @@ TRABALHO - FINAL/
 
 ## 👤 Autor
 
-Trabalho Final - Análise de Dados de Doenças Cardíacas
+Iago Vieira da Silva | Trabalho Final - Análise de Dados de Doenças Cardíacas
 
 ---
 
