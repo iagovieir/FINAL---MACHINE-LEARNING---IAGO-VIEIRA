@@ -10,8 +10,12 @@ from sklearn.preprocessing import StandardScaler, OneHotEncoder
 from sklearn.pipeline import Pipeline
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import (
-    accuracy_score, roc_auc_score, confusion_matrix, roc_curve, silhouette_score
+    accuracy_score, roc_auc_score, confusion_matrix, roc_curve, silhouette_score,
+    precision_recall_curve
 )
+from sklearn.calibration import calibration_curve
+from sklearn.inspection import permutation_importance
+from sklearn.metrics import silhouette_samples
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.cluster import KMeans
 from sklearn.decomposition import PCA
@@ -68,7 +72,7 @@ if "restecg" in df_disp: df_disp["restecg"] = df_disp["restecg"].map(restecg_map
 if "slope" in df_disp:   df_disp["slope"]   = df_disp["slope"].map(slope_map)
 if "cp" in df_disp:      df_disp["cp"]      = df_disp["cp"].map(cp_map)
 if "thal" in df_disp:    df_disp["thal"]    = df_disp["thal"].map(thal_map)
-# 'ca' permanece numérico (0–4) → número de vasos principais coloridos por fluoroscopia
+# 'ca' permanece numérico (0–4)
 
 # Colunas
 NUM_COLS = ['age', 'trestbps', 'chol', 'thalach', 'oldpeak']
@@ -77,7 +81,7 @@ ALL_FEATURES = NUM_COLS + CAT_COLS
 X = df[ALL_FEATURES]
 y = df['target']
 
-# Pré-processador comum (numéricas padronizadas + categóricas one-hot)
+# Pré-processador comum
 preprocess_common = ColumnTransformer(
     transformers=[
         ("num", StandardScaler(), NUM_COLS),
@@ -86,15 +90,14 @@ preprocess_common = ColumnTransformer(
     remainder="drop"
 )
 
-# bounds p/ validação leve (p5–p95) das numéricas
+# bounds p/ validação leve
 bounds = {c: (float(np.nanpercentile(df[c], 5)), float(np.nanpercentile(df[c], 95))) for c in NUM_COLS}
 def clamp_num(name, val):
     lo, hi = bounds.get(name, (None, None))
     return float(np.clip(val, lo, hi)) if lo is not None else float(val)
 
 # ============================================
-# ABAS — nova ordem:
-# 1) Relatório, 2) EDA, 3) Superv., 4) Não Superv.
+# ABAS
 # ============================================
 tab1, tab2, tab3, tab4 = st.tabs([
     "📑 Relatório Automático de Insights",
@@ -109,17 +112,14 @@ tab1, tab2, tab3, tab4 = st.tabs([
 with tab1:
     st.title("📑 Relatório Automático de Insights")
 
-    # 1) Balanceamento
     pos_rate = df["target"].mean()*100
     st.subheader("🎯 Balanceamento do Alvo")
     st.write(f"Proporção de pacientes com doença (target=1): **{pos_rate:.1f}%**.")
 
-    # 2) Top correlações com o alvo (numéricas)
     st.subheader("🔗 Top correlações (numéricas) com o alvo")
     corr_target = df[NUM_COLS + ["target"]].corr()["target"].drop("target").sort_values(ascending=False)
     st.write(corr_target.to_frame("correlação").round(3))
 
-    # 3) Diferenças por categoria (taxa de target=1) — usando df original (numérico)
     st.subheader("🏷️ Variáveis categóricas que mais diferenciam o alvo")
     diffs = []
     for c in CAT_COLS:
@@ -128,7 +128,6 @@ with tab1:
     diffs = sorted(diffs, key=lambda x: x[1], reverse=True)
     st.write(pd.DataFrame(diffs, columns=["variável", "Δ máxima de proporção"]).head(10))
 
-    # 4) Possíveis outliers numéricos (z-score simples)
     st.subheader("🚩 Possíveis outliers (numéricos)")
     outs = {}
     for c in NUM_COLS:
@@ -136,31 +135,12 @@ with tab1:
         outs[c] = int((np.abs(z) > 3).sum())
     st.write(pd.DataFrame.from_dict(outs, orient="index", columns=["contagem_outliers"]))
 
-    # 5) Recomendação de modelagem
-    st.subheader("🧠 Recomendações de Modelagem")
-    st.markdown("""
-    - **Supervisionado**: Utilize **RandomForest** (aba dedicada); para interpretabilidade adicional, teste **Regressão Logística** com One-Hot.
-    - **Não supervisionado**: **KMeans** com **k sugerido por Silhouette** (aba dedicada); para clusters elípticos, avalie **GaussianMixture**.
-    - **Validação**: *Hold-out* estratificado e monitoramento de **AUC/ROC**, **Precision/Recall** conforme a necessidade.
-    - **Limiar**: Ajuste por **Youden (ROC)** no supervisionado; no não-supervisionado use **baseline** ou **mediana** dos riscos dos clusters.
-    """)
-
-    # 6) Próximos passos
-    st.subheader("🔭 Próximos passos sugeridos")
-    st.markdown("""
-    - Curva ROC interativa para ajuste de limiar.
-    - Explicabilidade com SHAP/PDP.
-    - Busca de hiperparâmetros (RandomizedSearch/Optuna).
-    - Comparar KMeans vs GMM (Silhouette/BIC).
-    """)
-
 # ============================================
-# TAB 2 — EXPLORATÓRIA (aprimorada) — usa df_disp (rótulos)
+# TAB 2 — EDA (aprimorada)
 # ============================================
 with tab2:
     st.title("📊 Análise Exploratória dos Dados (EDA)")
 
-    # Overview
     st.header("📋 Visão Geral")
     col1, col2, col3 = st.columns(3)
     col1.metric("Observações", df.shape[0])
@@ -170,7 +150,6 @@ with tab2:
     st.subheader("📈 Estatísticas Descritivas (Numéricas)")
     st.dataframe(df[NUM_COLS + ["target"]].describe().T.style.background_gradient(cmap="Blues"))
 
-    # Distribuições (com rótulos para categóricas)
     st.header("📊 Distribuições e Comparações por Diagnóstico")
     ALL_FOR_DISPLAY = NUM_COLS + CAT_COLS
     var = st.selectbox("Escolha uma variável:", ALL_FOR_DISPLAY, index=0, key="eda_var")
@@ -179,23 +158,11 @@ with tab2:
         fig = px.histogram(df, x=var, color="target", nbins=30, barmode="overlay",
                            title=f"Distribuição de {var} por Diagnóstico (target)")
         st.plotly_chart(fig, use_container_width=True)
-
-        colA, colB = st.columns(2)
-        with colA:
-            fig = px.box(df, x="target", y=var, color="target", points="all",
-                         title=f"Boxplot de {var} por target")
-            st.plotly_chart(fig, use_container_width=True)
-        with colB:
-            fig = px.violin(df, x="target", y=var, color="target", box=True, points="all",
-                            title=f"Violin plot de {var} por target")
-            st.plotly_chart(fig, use_container_width=True)
     else:
-        # usar df_disp para rótulos legíveis
         fig = px.histogram(df_disp, x=var, color="target", barmode="group",
                            title=f"Contagem de {var} por Diagnóstico (target) — rótulos legíveis")
         st.plotly_chart(fig, use_container_width=True)
 
-    # Correlações (numéricas)
     st.header("🔗 Correlação entre Variáveis (numéricas)")
     corr = df[NUM_COLS + ["target"]].corr(numeric_only=True)
     fig, ax = plt.subplots(figsize=(9,6))
@@ -203,7 +170,6 @@ with tab2:
     st.pyplot(fig)
     st.caption("Correlação de Pearson entre variáveis numéricas e o diagnóstico (`target`).")
 
-    # Relações numéricas com tendência (sem statsmodels)
     st.header("📈 Relações Numéricas com Tendência")
     colx, coly = st.columns(2)
     with colx:
@@ -221,13 +187,11 @@ with tab2:
         fig_sc.add_trace(go.Scatter(x=xs, y=ys, mode="lines", name="Tendência (global)"))
     st.plotly_chart(fig_sc, use_container_width=True)
 
-    # Comparações categóricas com rótulos legíveis
     st.header("🏷️ Comparações Categóricas")
     cat_var = st.selectbox("Variável categórica:", CAT_COLS, index=0, key="eda_cat")
     resumo = df.groupby(cat_var)["target"].agg(["mean", "count"]).rename(
         columns={"mean": "Proporção de doença", "count": "N"}
     )
-    # legenda amigável
     legenda = {
         "sex": sex_map, "fbs": fbs_map, "exang": exang_map, "restecg": restecg_map,
         "slope": slope_map, "cp": cp_map, "thal": thal_map
@@ -240,7 +204,6 @@ with tab2:
                  title=f"Taxa média de doença por {cat_var} (rótulos legíveis)")
     st.plotly_chart(fig, use_container_width=True)
 
-    # Interação multicategórica (rótulos sex/cp)
     st.header("🔍 Interação: Sexo × Tipo de Dor (cp) × Diagnóstico")
     pivot = df.pivot_table(values="target", index="cp", columns="sex", aggfunc="mean")
     pivot.index = pivot.index.map(cp_map)
@@ -249,7 +212,6 @@ with tab2:
                     labels=dict(x="Sexo", y="Tipo de Dor (cp)", color="Prob. de Doença"))
     st.plotly_chart(fig, use_container_width=True)
 
-    # PCA 3D (numéricas)
     st.header("🧩 PCA (Redução de Dimensionalidade, numéricas)")
     pca = PCA(n_components=3, random_state=42)
     X_num_scaled = StandardScaler().fit_transform(df[NUM_COLS])
@@ -264,12 +226,11 @@ with tab2:
     st.plotly_chart(fig, use_container_width=True)
 
 # ============================================
-# TAB 3 — SUPERVISIONADO (RandomForest) — selects com rótulos
+# TAB 3 — SUPERVISIONADO (RandomForest)
 # ============================================
 with tab3:
     st.title("💖 Predição (RandomForest + OneHot + StandardScaler)")
 
-    # Controles
     colM1, colM2, colM3 = st.columns(3)
     with colM1:
         n_estimators = st.slider("n_estimators", 100, 1000, 400, step=50)
@@ -279,7 +240,6 @@ with tab3:
     with colM3:
         test_size = st.slider("Tamanho do teste (%)", 10, 40, 25, step=5) / 100.0
 
-    # Split + pipeline
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=test_size, stratify=y, random_state=42
     )
@@ -289,19 +249,18 @@ with tab3:
     pipe_rf = Pipeline(steps=[("prep", preprocess_common), ("rf", rf)])
     pipe_rf.fit(X_train, y_train)
 
-    # Limiar
     st.markdown("**Limiar de classificação**")
     limiar_mode = st.selectbox("Modo do limiar", ["0.5 (padrão)", "Automático (Youden/ROC)"])
     y_proba_test = pipe_rf.predict_proba(X_test)[:,1]
     if limiar_mode == "Automático (Youden/ROC)":
-        fpr, tpr, thr_grid = roc_curve(y_test, y_proba_test)
-        j = tpr - fpr
+        fpr0, tpr0, thr_grid = roc_curve(y_test, y_proba_test)
+        j = tpr0 - fpr0
         thr = float(thr_grid[np.argmax(j)])
     else:
         thr = 0.5
     st.info(f"Limiar atual: **{thr:.3f}**")
 
-    # Formulário com rótulos legíveis
+    # Formulário
     with st.form("form_superv"):
         c1, c2, c3 = st.columns(3)
         with c1:
@@ -320,11 +279,9 @@ with tab3:
             slope_label = st.selectbox("Inclinação ST no pico (slope)", list(slope_inv.keys()))
             ca = st.selectbox("Vasos principais coloridos (ca)", [0,1,2,3,4], help="Número de vasos (0–4)")
             thal_label = st.selectbox("Thalassemia (thal)", list(thal_inv.keys()))
-
         pred_click = st.form_submit_button("🔮 Prever (Supervisionado)")
 
     if pred_click:
-        # mapear de volta para os códigos numéricos
         novo = pd.DataFrame([{
             "age": clamp_num("age", age),
             "trestbps": clamp_num("trestbps", trestbps),
@@ -378,16 +335,99 @@ with tab3:
     ax.set_title("Matriz de Confusão")
     st.pyplot(fig_cm)
 
+    # ======== NOVOS GRÁFICOS — SUPERVISIONADO ========
+    st.subheader("📉 Curva ROC")
+    fpr, tpr, _ = roc_curve(y_test, y_proba_test)
+    fig_roc = px.area(
+        x=fpr, y=tpr,
+        labels=dict(x="FPR (1 - Especificidade)", y="TPR (Sensibilidade)"),
+        title=f"ROC — AUC={roc_auc_score(y_test, y_proba_test):.3f}"
+    )
+    fig_roc.add_shape(type="line", x0=0, x1=1, y0=0, y1=1)
+    st.plotly_chart(fig_roc, use_container_width=True)
+
+    st.subheader("📈 Curva Precisão–Recall")
+    prec, rec, _ = precision_recall_curve(y_test, y_proba_test)
+    fig_pr = px.area(x=rec, y=prec, labels=dict(x="Recall", y="Precisão"), title="Precisão–Recall")
+    st.plotly_chart(fig_pr, use_container_width=True)
+
+    st.subheader("📦 Distribuição de Probabilidades (por classe real)")
+    df_proba = pd.DataFrame({"proba": y_proba_test, "y": y_test})
+    fig_hist = px.histogram(
+        df_proba, x="proba", color="y", nbins=30, barmode="overlay",
+        labels={"y":"Classe real", "proba":"Probabilidade (classe=1)"},
+        title="Distribuição das probabilidades — separadas por classe"
+    )
+    st.plotly_chart(fig_hist, use_container_width=True)
+
+    st.subheader("🧪 Calibração do Classificador")
+    prob_true, prob_pred = calibration_curve(y_test, y_proba_test, n_bins=10, strategy="quantile")
+    fig_cal = go.Figure()
+    fig_cal.add_trace(go.Scatter(x=prob_pred, y=prob_true, mode="lines+markers", name="Modelo"))
+    fig_cal.add_trace(go.Scatter(x=[0,1], y=[0,1], mode="lines", name="Ideal", line=dict(dash="dash")))
+    fig_cal.update_layout(xaxis_title="Probabilidade prevista", yaxis_title="Frequência observada",
+                          title="Curva de Calibração")
+    st.plotly_chart(fig_cal, use_container_width=True)
+
+    st.subheader("⚖️ Varredura de Limiar")
+    fpr_g, tpr_g, thr_g = roc_curve(y_test, y_proba_test)
+    youden = tpr_g - fpr_g
+    thr_df = pd.DataFrame({
+        "threshold": thr_g,
+        "sensibilidade": tpr_g,
+        "especificidade": 1 - fpr_g,
+        "youden_J": youden
+    }).sort_values("threshold")
+    fig_thr = px.line(thr_df, x="threshold", y=["sensibilidade","especificidade","youden_J"],
+                      title="Sensibilidade, Especificidade e Youden J por limiar")
+    st.plotly_chart(fig_thr, use_container_width=True)
+
+    st.subheader("🌲 Importância de Atributos (Top 15)")
+    prep = pipe_rf.named_steps["prep"]
+    rf_model = pipe_rf.named_steps["rf"]
+    num_names = prep.transformers_[0][2]
+    ohe = prep.transformers_[1][1]
+    cat_names_raw = prep.transformers_[1][2]
+    ohe_feature_names = ohe.get_feature_names_out(cat_names_raw)
+    feat_names = np.concatenate([num_names, ohe_feature_names])
+    imp = rf_model.feature_importances_
+    imp_df = pd.DataFrame({"feature": feat_names, "importance": imp}).sort_values("importance", ascending=False).head(15)
+    fig_imp = px.bar(imp_df.sort_values("importance"), x="importance", y="feature",
+                     orientation="h", title="Importâncias (RandomForest) — Top 15")
+    st.plotly_chart(fig_imp, use_container_width=True)
+
+    # *** FIX: permutation importance sobre features originais (mesma quantidade de colunas que X_test) ***
+    with st.expander("Ver importância por permutação (mais precisa, pode ser lenta)"):
+        with st.spinner("Calculando permutation importance..."):
+            r = permutation_importance(
+                pipe_rf,      # pipeline completo (prep + rf)
+                X_test,       # DataFrame original (features originais)
+                y_test,
+                n_repeats=5,
+                random_state=42,
+                n_jobs=-1
+            )
+            perm_df = pd.DataFrame({
+                "feature": ALL_FEATURES,
+                "importance": r.importances_mean
+            }).sort_values("importance", ascending=False).head(15)
+
+        fig_perm = px.bar(
+            perm_df.sort_values("importance"),
+            x="importance", y="feature",
+            orientation="h",
+            title="Permutation Importance (features originais) — Top 15"
+        )
+        st.plotly_chart(fig_perm, use_container_width=True)
+
 # ============================================
-# TAB 4 — NÃO SUPERVISIONADO (KMeans) — selects com rótulos
+# TAB 4 — NÃO SUPERVISIONADO (KMeans)
 # ============================================
 with tab4:
     st.title("🧠 Agrupamento (KMeans + OneHot + StandardScaler)")
 
-    # Dados transformados p/ clustering
     X_transformed = preprocess_common.fit_transform(X)
 
-    # Sugerir k por silhouette (2..8)
     with st.spinner("Avaliando k por Silhouette (2–8)..."):
         silscores = {}
         for kk in range(2, 9):
@@ -401,23 +441,37 @@ with tab4:
     with colK2: st.metric("Silhouette(k sugerido)", f"{silscores[k_sugerido]:.3f}")
     with colK3: k = st.slider("Escolha k (pode sobrepor o sugerido)", 2, 10, int(k_sugerido))
 
-    # Treina KMeans final
+    inertias = {}
+    for kk in range(2, 11):
+        km_tmp = KMeans(n_clusters=kk, random_state=42, n_init=10)
+        km_tmp.fit(X_transformed)
+        inertias[kk] = km_tmp.inertia_
+
+    cE1, cE2 = st.columns(2)
+    with cE1:
+        fig_elbow = px.line(x=list(inertias.keys()), y=list(inertias.values()),
+                            labels={"x": "k", "y": "Inércia"},
+                            title="Elbow Method (Inércia vs k)")
+        st.plotly_chart(fig_elbow, use_container_width=True)
+    with cE2:
+        fig_sil = px.bar(x=list(silscores.keys()), y=list(silscores.values()),
+                         labels={"x":"k","y":"Silhouette"},
+                         title="Silhouette por k (2–8)")
+        st.plotly_chart(fig_sil, use_container_width=True)
+
     kmeans = KMeans(n_clusters=k, random_state=42, n_init=10)
     clusters = kmeans.fit_predict(X_transformed)
     df_clusters = df.copy()
     df_clusters["Cluster"] = clusters
 
-    # Métricas globais
     baseline = float(df["target"].mean() * 100)
     sil_final = float(silhouette_score(X_transformed, clusters))
     st.caption(f"Baseline (positivos no dataset): {baseline:.1f}% • Silhouette(k={k}): {sil_final:.3f}")
 
-    # Risco por cluster
     risco_por_cluster = df_clusters.groupby("Cluster")["target"].mean().reindex(range(k), fill_value=np.nan) * 100
     st.write("**Risco médio por cluster (%)**")
     st.dataframe(risco_por_cluster.round(1).to_frame("risco_%").T)
 
-    # PCA 2D para visualização
     st.subheader("PCA (2D) dos clusters")
     pca = PCA(n_components=2, random_state=42)
     X_pca = pca.fit_transform(X_transformed)
@@ -425,7 +479,48 @@ with tab4:
     fig_pca = px.scatter(vis, x="PCA1", y="PCA2", color="Cluster", title="Distribuição por Cluster (PCA)")
     st.plotly_chart(fig_pca, use_container_width=True)
 
-    # Formulário com rótulos legíveis
+    st.subheader("📏 Silhouette por Amostra")
+    sample_sil = silhouette_samples(X_transformed, clusters)
+    sil_df = pd.DataFrame({"silhouette": sample_sil, "cluster": clusters}) \
+               .sort_values(["cluster", "silhouette"], ascending=[True, False]) \
+               .reset_index(drop=True)
+
+    fig_silplot, ax = plt.subplots(figsize=(8, 5))
+    y_lower = 10
+    for cl in range(k):
+        vals = sil_df.loc[sil_df["cluster"] == cl, "silhouette"].values
+        size = len(vals)
+        y_upper = y_lower + size
+        ax.fill_betweenx(np.arange(y_lower, y_upper), 0, vals, alpha=0.7, label=f"Cluster {cl}")
+        ax.text(-0.05, y_lower + 0.5 * size, str(cl))
+        y_lower = y_upper + 10
+    ax.axvline(x=sil_final, color="red", linestyle="--", label=f"Média = {sil_final:.3f}")
+    ax.set_xlabel("Coeficiente de Silhouette")
+    ax.set_ylabel("Amostras ordenadas por cluster")
+    ax.legend(loc="lower right", ncols=2, fontsize=8)
+    st.pyplot(fig_silplot)
+
+    st.subheader("🧭 Perfil dos Clusters (z-score nas numéricas)")
+    num_means = df_clusters.groupby("Cluster")[NUM_COLS].mean()
+    num_z = (num_means - df[NUM_COLS].mean()) / df[NUM_COLS].std(ddof=0)
+    num_z = num_z.reindex(range(k))
+
+    fig_prof_hm = px.imshow(
+        num_z.T, text_auto=".2f", color_continuous_scale="RdBu", origin="lower",
+        labels=dict(x="Cluster", y="Variável", color="z-score"),
+        title="Heatmap — z-score médio por variável (vs média global)"
+    )
+    st.plotly_chart(fig_prof_hm, use_container_width=True)
+
+    with st.expander("Ver Radar por Cluster"):
+        for cl in range(k):
+            row = num_z.loc[cl].reset_index()
+            row.columns = ["variavel", "z"]
+            fig_radar = px.line_polar(row, r="z", theta="variavel", line_close=True,
+                                      title=f"Cluster {cl} — Radar (numéricas)")
+            fig_radar.update_traces(fill="toself")
+            st.plotly_chart(fig_radar, use_container_width=True)
+
     with st.form("form_unsup"):
         u1, u2, u3 = st.columns(3)
         with u1:
@@ -445,14 +540,15 @@ with tab4:
             ca = st.selectbox("Vasos principais coloridos (ca)", [0,1,2,3,4], help="Número de vasos (0–4)", key="u_ca")
             thal_label = st.selectbox("Thalassemia (thal)", list(thal_inv.keys()), key="u_thal")
 
-        limiar_mode = st.selectbox("Limiar Alto Risco",
-                                   ["Manual (50%)", "Baseline do dataset", "Mediana dos riscos dos clusters"])
+        limiar_mode = st.selectbox(
+            "Limiar Alto Risco",
+            ["Manual (50%)", "Baseline do dataset", "Mediana dos riscos dos clusters"]  # fix do parêntese
+        )
         limiar_manual = st.slider("Limiar manual (%)", 10, 90, 50)
 
         calc_click = st.form_submit_button("🧠 Calcular Cluster & Risco")
 
     if calc_click:
-        # mapear de volta para os códigos numéricos
         novo = pd.DataFrame([{
             "age": clamp_num("age", age),
             "trestbps": clamp_num("trestbps", trestbps),
@@ -475,7 +571,6 @@ with tab4:
         cluster_size = int((df_clusters["Cluster"]==cluster_pred).sum())
         delta = risco_cluster - baseline
 
-        # Limiar
         if limiar_mode == "Baseline do dataset":
             limiar = baseline
         elif limiar_mode == "Mediana dos riscos dos clusters":
