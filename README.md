@@ -1,0 +1,146 @@
+# 💖 Análise de Doenças Cardíacas - Dashboard Interativo
+
+Projeto de análise de dados sobre doenças cardíacas utilizando machine learning supervisionado e não supervisionado, com interface web interativa desenvolvida em Streamlit.
+
+## 📋 Descrição
+
+Este projeto oferece uma aplicação web completa para análise de dados de doenças cardíacas, incluindo:
+
+- **📑 Relatório Automático**: Insights automáticos sobre balanceamento, correlações, outliers e recomendações
+- **📊 Análise Exploratória (EDA)**: Visualizações interativas com histogramas, boxplots, violinos, correlações e PCA 3D
+- **💖 Modelo Supervisionado**: RandomForest com interface para predição de risco cardíaco
+- **🧠 Modelo Não Supervisionado**: KMeans para agrupamento de pacientes por similaridade
+
+## 🚀 Como Iniciar o Projeto
+
+### Pré-requisitos
+
+- Python 3.8 ou superior
+- pip (gerenciador de pacotes Python)
+
+### Passo a Passo
+
+1. **Clone o repositório ou navegue até a pasta do projeto**
+   ```bash
+   cd "C:\Users\GABPE - IAGO\Desktop\TRABALHO - FINAL"
+   ```
+
+2. **Crie um ambiente virtual (recomendado)**
+   ```bash
+   python -m venv venv
+   ```
+   
+   **Ative o ambiente virtual:**
+   - No Windows (PowerShell):
+     ```powershell
+     .\venv\Scripts\Activate.ps1
+     ```
+   - No Windows (CMD):
+     ```cmd
+     venv\Scripts\activate.bat
+     ```
+   - No Linux/Mac:
+     ```bash
+     source venv/bin/activate
+     ```
+
+3. **Instale as dependências**
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+4. **Certifique-se de que o arquivo `heart.csv` está na pasta do projeto**
+
+5. **Execute a aplicação Streamlit**
+   ```bash
+   streamlit run app.py
+   ```
+
+6. **Acesse a aplicação**
+   - O Streamlit abrirá automaticamente no navegador em `http://localhost:8501`
+   - Se não abrir automaticamente, copie a URL exibida no terminal e cole no navegador
+
+## 📦 Dependências
+
+O arquivo `requirements.txt` contém todas as bibliotecas necessárias:
+
+- `streamlit`: Framework para criação de aplicações web interativas
+- `pandas`: Manipulação e análise de dados
+- `numpy`: Operações numéricas
+- `scikit-learn`: Machine learning (RandomForest, KMeans, PCA, etc.)
+- `matplotlib`: Visualizações básicas
+- `seaborn`: Visualizações estatísticas avançadas
+- `plotly`: Gráficos interativos 3D e dinâmicos
+
+## 📁 Estrutura do Projeto
+
+```
+TRABALHO - FINAL/
+├── app.py              # Aplicação principal Streamlit
+├── heart.csv           # Dataset de doenças cardíacas (obrigatório)
+├── requirements.txt    # Dependências do projeto
+└── README.md           # Este arquivo
+```
+
+## 🎯 Funcionalidades
+
+### 1. Relatório Automático
+- Análise de balanceamento do conjunto de dados
+- Top correlações com a variável alvo
+- Identificação de variáveis categóricas mais relevantes
+- Detecção de outliers
+- Recomendações de modelagem
+
+### 2. Análise Exploratória
+- Estatísticas descritivas
+- Distribuições e comparações por diagnóstico
+- Matriz de correlação
+- Gráficos de dispersão com tendência
+- Análise de variáveis categóricas
+- Visualização PCA 3D
+
+### 3. Modelo Supervisionado (RandomForest)
+- Interface para ajuste de hiperparâmetros
+- Predição de risco cardíaco com base em características do paciente
+- Métricas de desempenho (Accuracy, ROC AUC, Matriz de Confusão)
+- Ajuste automático de limiar (Youden/ROC)
+
+### 4. Modelo Não Supervisionado (KMeans)
+- Sugestão automática de número de clusters (Silhouette Score)
+- Visualização PCA 2D dos clusters
+- Cálculo de risco médio por cluster
+- Predição de cluster e risco para novos pacientes
+
+## ⚠️ Aviso Importante
+
+Este projeto é destinado **exclusivamente para fins educacionais e analíticos**. **Não substitui** avaliação médica profissional ou diagnóstico clínico.
+
+## 🛠️ Solução de Problemas
+
+### Erro: "FileNotFoundError: Arquivo 'heart.csv' não encontrado"
+- Certifique-se de que o arquivo `heart.csv` está na mesma pasta que `app.py`
+
+### Erro ao instalar dependências
+- Atualize o pip: `python -m pip install --upgrade pip`
+- Instale as dependências novamente: `pip install -r requirements.txt`
+
+### Porta 8501 já em uso
+- Feche outras instâncias do Streamlit ou use uma porta diferente:
+  ```bash
+  streamlit run app.py --server.port 8502
+  ```
+
+## 📝 Notas
+
+- O dataset `heart.csv` é necessário para executar a aplicação
+- A primeira execução pode levar alguns segundos devido ao processamento inicial
+- Os modelos são treinados em tempo real com base no dataset fornecido
+
+## 👤 Autor
+
+Trabalho Final - Análise de Dados de Doenças Cardíacas
+
+---
+
+**Desenvolvido com ❤️ usando Streamlit e scikit-learn**
+
