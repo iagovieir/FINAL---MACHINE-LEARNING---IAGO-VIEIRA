@@ -15,7 +15,7 @@ Este projeto oferece uma aplicação web completa para análise de dados de doen
 
 ### Pré-requisitos
 
-- Python 3.8 ou superior
+- Python 3.11
 - pip (gerenciador de pacotes Python)
 
 ### Passo a Passo

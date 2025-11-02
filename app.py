@@ -141,15 +141,6 @@ with tab1:
 with tab2:
     st.title("📊 Análise Exploratória dos Dados (EDA)")
 
-    st.header("📋 Visão Geral")
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Observações", df.shape[0])
-    col2.metric("Variáveis (total)", df.shape[1])
-    col3.metric("Proporção com doença (target=1)", f"{df['target'].mean()*100:.1f}%")
-
-    st.subheader("📈 Estatísticas Descritivas (Numéricas)")
-    st.dataframe(df[NUM_COLS + ["target"]].describe().T.style.background_gradient(cmap="Blues"))
-
     st.header("📊 Distribuições e Comparações por Diagnóstico")
     ALL_FOR_DISPLAY = NUM_COLS + CAT_COLS
     var = st.selectbox("Escolha uma variável:", ALL_FOR_DISPLAY, index=0, key="eda_var")
